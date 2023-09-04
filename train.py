@@ -52,8 +52,8 @@ if __name__ == "__main__":
     parser.add_argument("--learning_rate", type=float, default=1e-5)
     parser.add_argument("--num_epochs", type=int, default=5)
     parser.add_argument("--device", type=str, default="cuda")
-    parser.add_argument("--train_batch_size", type=int, default=8)
-    parser.add_argument("--eval_batch_size", type=int, default=8)
+    parser.add_argument("--train_batch_size", type=int, default=512)
+    parser.add_argument("--eval_batch_size", type=int, default=512)
     parser.add_argument("--n_train", type=int, default=100000)
     parser.add_argument("--n_eval", type=int, default=1000)
     parser.add_argument("--n_nodes", type=int, default=10)
@@ -63,7 +63,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # initialize wandb
-    wandb.init(project="graph-connectivity", entity="codegen")
+    wandb.init(project="graph-connectivity", entity="codegen", config=args)
 
     # load the data
     train_dataloader, test_dataloader = make_dataloaders(args)
@@ -108,5 +108,5 @@ if __name__ == "__main__":
 
             if step % args.eval_freq == 0:
                 loss, accuracy = eval(model, test_dataloader)
-                print(f"eval loss: {loss} | accuracy: {accuracy}")
+                print(f"eval loss: {loss} | accuracy: {accuracy}", flush=True)
                 model.train()
