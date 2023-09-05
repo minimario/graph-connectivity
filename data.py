@@ -21,10 +21,26 @@ def graph_to_sequence(graph):
     sequence.append(end+1)
     return (sequence, int(has_path))
 
-def measure_overlap(train_graphs, eval_graphs):
+def measure_sequence_overlap(train_graphs, eval_graphs):
+    # measures raw token sequence overlap
     train_sequences = [str(graph_to_sequence(graph)[0]) for graph in train_graphs]
     eval_sequences = [str(graph_to_sequence(graph)[0]) for graph in eval_graphs]
     return len(set(train_sequences).intersection(set(eval_sequences))) / len(set(eval_sequences))
+
+def measure_graph_overlap(train_graphs, eval_graphs):
+    # measure overlap in graphs and start/end nodes
+    # graphs with edges in a different order are considered the same
+    def make_equivariant_sequence(graphs):
+        es = []
+        for g, (s, e), _ in graphs:
+            g = list(g)
+            g.sort()
+            g.append((min(s, e), max(s, e)))
+            es.append(str(g))
+        return es
+    train_es = make_equivariant_sequence(train_graphs)
+    eval_es = make_equivariant_sequence(eval_graphs)
+    return len(set(train_es).intersection(set(eval_es))) / len(set(eval_es))
     
 def collate_fn(graphs, device="cuda"):
     xs = []
@@ -41,13 +57,21 @@ def collate_fn(graphs, device="cuda"):
         result = {k: v.cuda() for k, v in result.items()}
     return result
     
+def make_eval_dataloader(args):
+    eval_graphs = []
+    for seed in range(10**10, 10**10+args.n_eval):
+        eval_graphs.append(generate_input(args.n_nodes, args.p_edge, seed))
+    eval_dataloader = DataLoader(eval_graphs, batch_size=args.eval_batch_size, shuffle=True, collate_fn=collate_fn)
+    return eval_dataloader
+
 def make_dataloaders(args):
     train_graphs, eval_graphs = [], []
     for seed in range(args.n_train):
         train_graphs.append(generate_input(args.n_nodes, args.p_edge, seed))
     for seed in range(args.n_train, args.n_train+args.n_eval):
         eval_graphs.append(generate_input(args.n_nodes, args.p_edge, seed))
-    print(f"train/eval overlap: {measure_overlap(train_graphs, eval_graphs)}")
+    print(f"train/eval sequence overlap: {measure_sequence_overlap(train_graphs, eval_graphs)}")
+    print(f"train/eval graph overlap: {measure_graph_overlap(train_graphs, eval_graphs)}")
 
     train_dataloader = DataLoader(train_graphs, batch_size=args.train_batch_size, shuffle=True, collate_fn=collate_fn)
     eval_dataloader = DataLoader(eval_graphs, batch_size=args.eval_batch_size, shuffle=True, collate_fn=collate_fn)

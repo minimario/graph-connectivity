@@ -69,7 +69,6 @@ if __name__ == "__main__":
     parser.add_argument("--save_freq", type=float, default=500)
     parser.add_argument("--load_dir", type=str, default=None)
     parser.add_argument("--save_dir", type=str, default="checkpoints")
-
     args = parser.parse_args()
 
     # initialize wandb
@@ -87,7 +86,6 @@ if __name__ == "__main__":
         model = BertForSequenceClassification.from_pretrained(args.load_dir)
 
     print(f"Loading from {args.load_dir}", flush=True)
-    model.load_state_dict
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Number of parameters: {total_params}")
     model.to(args.device)
