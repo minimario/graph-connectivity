@@ -113,7 +113,7 @@ if __name__ == "__main__":
                 continue
 
             # calculate loss
-            outputs = model(**batch)
+            outputs = model(input_ids=batch["input_ids"], attention_mask=batch["attention_mask"], labels=batch["labels"])
             loss = outputs.loss
 
             # calculate accuracy

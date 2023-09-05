@@ -8,10 +8,10 @@ def generate_input(n, p, seed) -> tuple[list[tuple[int, int]], tuple[int, int], 
     graph = nx.erdos_renyi_graph(n, p, seed)
     random.seed(seed)
     start, end = random.sample(range(n), 2)
-    return (graph.edges(), (start, end), nx.has_path(graph, start, end))
+    return (graph.edges(), (start, end), nx.has_path(graph, start, end), (n, p, seed))
 
 def graph_to_sequence(graph):
-    edges, (start, end), has_path = graph
+    edges, (start, end), has_path, graph_id = graph
     sequence = []
     for (a, b) in edges:
         sequence.append(a+1)
@@ -19,7 +19,7 @@ def graph_to_sequence(graph):
         sequence.append(0)
     sequence.append(start+1)
     sequence.append(end+1)
-    return (sequence, int(has_path))
+    return (sequence, int(has_path), graph_id)
 
 def measure_sequence_overlap(train_graphs, eval_graphs):
     # measures raw token sequence overlap
@@ -32,7 +32,7 @@ def measure_graph_overlap(train_graphs, eval_graphs):
     # graphs with edges in a different order are considered the same
     def make_equivariant_sequence(graphs):
         es = []
-        for g, (s, e), _ in graphs:
+        for g, (s, e), _, _ in graphs:
             g = list(g)
             g.sort()
             g.append((min(s, e), max(s, e)))
@@ -45,23 +45,40 @@ def measure_graph_overlap(train_graphs, eval_graphs):
 def collate_fn(graphs, device="cuda"):
     xs = []
     ys = []
+    graph_ids = []
     for graph in graphs:
-        x, y = graph_to_sequence(graph)
+        x, y, graph_id = graph_to_sequence(graph)
         xs.append(x)
         ys.append(y)
+        graph_ids.append(graph_id)
     padding_value = 200
     padded_xs = torch.nn.utils.rnn.pad_sequence([torch.tensor(x) for x in xs], batch_first=True, padding_value=padding_value)
     attention_mask = (padded_xs != padding_value).type(torch.long)
     result = {"input_ids": padded_xs, "attention_mask": attention_mask, "labels": torch.tensor(ys)}
     if device == "cuda":
         result = {k: v.cuda() for k, v in result.items()}
+    result["graph_ids"] = graph_ids
     return result
     
+def make_all_pairs_data(n, p, seeds) -> list[tuple[list[tuple[str, str]], tuple[int, int], bool]]:
+    data = []
+    for seed in seeds:
+        graph = nx.erdos_renyi_graph(n, p, seed)
+        for start in range(n):
+            for end in range(start+1, n):
+                data.append((graph.edges(), (start, end), nx.has_path(graph, start, end), (n, p, seed)))
+    return data
+    
+def make_all_pairs_dataloader(args):
+    eval_graphs = make_all_pairs_data(args.n_nodes, args.p_edge, range(10**10, 10**10+args.n_eval))
+    eval_dataloader = DataLoader(eval_graphs, batch_size=args.eval_batch_size, shuffle=False, collate_fn=collate_fn)
+    return eval_dataloader
+
 def make_eval_dataloader(args):
     eval_graphs = []
     for seed in range(10**10, 10**10+args.n_eval):
         eval_graphs.append(generate_input(args.n_nodes, args.p_edge, seed))
-    eval_dataloader = DataLoader(eval_graphs, batch_size=args.eval_batch_size, shuffle=True, collate_fn=collate_fn)
+    eval_dataloader = DataLoader(eval_graphs, batch_size=args.eval_batch_size, shuffle=False, collate_fn=collate_fn)
     return eval_dataloader
 
 def make_dataloaders(args):
