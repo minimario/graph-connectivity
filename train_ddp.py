@@ -3,9 +3,19 @@ from tqdm import tqdm
 import argparse
 from data import make_dataloaders
 import torch
+from torch.nn.parallel import DistributedDataParallel as DDP
 from transformers import BertConfig, BertForSequenceClassification
 from transformers import get_scheduler
+import torch.distributed as dist
 import wandb
+
+def init_ddp():
+    os.environ['MASTER_ADDR']= '127.0.0.1'
+    os.environ['MASTER_PORT']= '29500'
+    
+size=4
+dist.init_process_group(backend='nccl', world_size=size)
+dist.barrier()
 
 def initialize_optimizer(model, args):
     no_decay = ["bias", "LayerNorm.weight"]
@@ -28,7 +38,7 @@ def eval(model, eval_dataloader, global_step):
         total_loss = 0
         total_accuracy = 0
         for batch in eval_dataloader:
-            outputs = model(input_ids=batch["input_ids"], attention_mask=batch["attention_mask"], labels=batch["labels"])
+            outputs = model(**batch)
             total_loss += outputs.loss
 
             # now calculate accuracy
@@ -69,12 +79,10 @@ if __name__ == "__main__":
     parser.add_argument("--save_freq", type=float, default=500)
     parser.add_argument("--load_dir", type=str, default=None)
     parser.add_argument("--save_dir", type=str, default="checkpoints")
-    parser.add_argument("--input_format", type=int, default=1)
-    parser.add_argument("--run_name", type=str, default=None)
     args = parser.parse_args()
 
     # initialize wandb
-    wandb.init(project="graph-connectivity", entity="codegen", config=args, name=args.run_name)
+    wandb.init(project="graph-connectivity", entity="codegen", config=args)
 
     # load the data
     train_dataloader, test_dataloader = make_dataloaders(args)
@@ -86,6 +94,10 @@ if __name__ == "__main__":
         model = BertForSequenceClassification(model_config)
     else:
         model = BertForSequenceClassification.from_pretrained(args.load_dir)
+
+    local_rank = int(os.environ["LOCAL_RANK"])
+    model = DDP(model, device_ids=[local_rank], output_device=local_rank)
+
 
     print(f"Loading from {args.load_dir}", flush=True)
     total_params = sum(p.numel() for p in model.parameters())

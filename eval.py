@@ -70,6 +70,7 @@ if __name__ == "__main__":
     parser.add_argument("--p_edge", type=float, default=0.16)
     parser.add_argument("--load_dir", type=str, default=None)
     parser.add_argument("--save_dir", type=str, default="eval/outputs")
+    parser.add_argument("--input_format", type=int, default=0)
     args = parser.parse_args()
 
     # initialize wandb
